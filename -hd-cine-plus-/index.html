@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Cine Plus TV 📺</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{
+  margin:0;
+  background:#000;
+  color:#fff;
+  font-family:Arial,Helvetica,sans-serif;
+  overflow-x:hidden;
+}
+header{
+  background:#111;
+  padding:15px;
+  position:sticky;
+  top:0;
+  z-index:10;
+  text-align:center;
+}
+.logo{
+  color:#e50914;
+  font-size:26px;
+  font-weight:bold;
+}
+
+#movies{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(160px,1fr));
+  gap:15px;
+  padding:20px;
+}
+.card{
+  background:#1c1c1c;
+  border-radius:10px;
+  cursor:pointer;
+  transition:transform .25s;
+}
+.card:hover{transform:scale(1.05);}
+.card img{width:100%;height:230px;object-fit:cover;border-radius:8px 8px 0 0;}
+.card p{text-align:center;padding:8px;font-size:14px;color:#fff;}
+
+#tv{
+  position:fixed;
+  inset:0;
+  background:#000;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  flex-direction:column;
+  z-index:9999;
+}
+#player{
+  width:90%;
+  max-width:900px;
+  height:500px;
+  border:none;
+  border-radius:10px;
+  box-shadow:0 0 25px rgba(229,9,20,.6);
+}
+.controls{
+  margin-top:10px;
+  display:flex;
+  gap:10px;
+}
+.controls button{
+  background:#e50914;
+  border:none;
+  padding:10px 20px;
+  color:#fff;
+  border-radius:6px;
+  font-size:16px;
+  cursor:pointer;
+  transition:.2s;
+}
+.controls button:hover{background:#f40612;}
+
+footer{
+  background:#111;
+  color:#aaa;
+  text-align:center;
+  font-size:13px;
+  padding:20px;
+}
+footer a{
+  color:#e50914;
+  text-decoration:none;
+  margin:0 8px;
+}
+footer a:hover{text-decoration:underline;}
+</style>
+</head>
+
+<body>
+
+<header>
+  <div class="logo">🎬 Cine Plus TV</div>
+</header>
+
+<!-- 🎥 CONTENEDOR DE PELÍCULAS -->
+<div id="movies"></div>
+<div id="sentinel"></div>
+
+<!-- 📺 REPRODUCTOR PRINCIPAL -->
+<div id="tv">
+  <div id="player"></div>
+  <div class="controls">
+    <button onclick="skip()">⏭ Siguiente</button>
+  </div>
+</div>
+
+<footer>
+  <p>© 2025 Cine Plus TV — Todos los derechos reservados.</p>
+  <a href="#privacidad" onclick="alert('No recopilamos datos personales. Cumplimos con normativas de privacidad.');">Privacidad</a> |
+  <a href="#terminos" onclick="alert('Cine Plus TV muestra únicamente trailers públicos de YouTube y TMDB.');">Términos</a> |
+  <a href="#contacto" onclick="alert('Contacto: cineplus.contact@gmail.com');">Contacto</a>
+</footer>
+
+<!-- 🎞️ SCRIPT PRINCIPAL -->
+<script src="https://www.youtube.com/iframe_api"></script>
+<script>
+const OMDB_KEY="d58f0933";
+const TMDB_KEY="a75df45f5957e88b88043e6e9558b941";
+let playlist=[],page=1,index=-1,player;
+
+// ✅ ID del video de bienvenida (intro)
+const introVideoId = "8ZcmTl_1ER8"; // puedes reemplazar por tu propio video de logo Cine Plus
+
+// ✅ Crear reproductor y manejar errores
+function onYouTubeIframeAPIReady() {
+  player = new YT.Player("player", {
+    playerVars: { autoplay: 1, controls: 1, rel: 0, mute: 1, playsinline: 1 },
+    events: {
+      onReady: () => {
+        play(introVideoId); // mostrar video de bienvenida primero
+      },
+      onStateChange: e => {
+        // Cuando termina el video (estado 0)
+        if (e.data === 0) {
+          if (index === -1) {
+            index = 0;
+            playTrailer(playlist[index]); // iniciar lista tras intro
+          } else {
+            next();
+          }
+        }
+      },
+      onError: e => {
+        console.warn("⚠️ Video bloqueado o eliminado, saltando...");
+        next();
+      }
+    }
+  });
+}
+
+// Reproducir video por ID
+function play(id){ player.loadVideoById(id); }
+function skip(){ next(); }
+
+// Avanzar al siguiente trailer
+async function next(){
+  index++;
+  if(index >= playlist.length - 1) await load();
+  playTrailer(playlist[index]);
+}
+
+// Cargar trailer desde TMDB
+async function playTrailer(imdb){
+  try {
+    const res = await fetch(`https://api.themoviedb.org/3/find/${imdb}?api_key=${TMDB_KEY}&external_source=imdb_id`);
+    const data = await res.json();
+    if(!data.movie_results[0]) return next();
+
+    const movieId = data.movie_results[0].id;
+    const vids = await fetch(`https://api.themoviedb.org/3/movie/${movieId}/videos?api_key=${TMDB_KEY}`);
+    const vd = await vids.json();
+
+    const trailer = vd.results.find(x => x.site === "YouTube" && (x.type === "Trailer" || x.type === "Teaser"));
+    if(trailer) play(trailer.key);
+    else next();
+  } catch(err){
+    console.error("❌ Error cargando trailer:", err);
+    next();
+  }
+}
+
+// Cargar catálogo (scroll infinito)
+async function load(){
+  try{
+    const res = await fetch(`https://www.omdbapi.com/?apikey=${OMDB_KEY}&s=movie&type=movie&page=${page}`);
+    const data = await res.json();
+    if(data.Response === "True"){
+      data.Search.forEach(m=>{
+        playlist.push(m.imdbID);
+        const c=document.createElement("div");
+        c.className="card";
+        c.innerHTML=`<img src="${m.Poster}" alt="${m.Title}"><p>${m.Title}</p>`;
+        c.onclick=()=>{index=playlist.indexOf(m.imdbID);playTrailer(m.imdbID);};
+        movies.appendChild(c);
+      });
+      page++;
+    }
+  }catch(e){
+    console.error("Error cargando películas:", e);
+  }
+}
+
+// Scroll infinito
+new IntersectionObserver(e=>e[0].isIntersecting && load()).observe(sentinel);
+
+// Cargar catálogo al iniciar
+window.onload = async () => { await load(); };
+</script>
+
+</body>
+</html>
